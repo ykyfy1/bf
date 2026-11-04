@@ -26,11 +26,10 @@ jobs:
         env:
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
-      - name: 部署文件到Cloudflare Pages
-        uses: cloudflare/pages-action@1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: iptv
-          branch: main
-          directory: ./
+      - name: 安装wrangler并部署到CF Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm install -g wrangler
+          wrangler pages deploy ./ --project-name=iptv --branch=main
