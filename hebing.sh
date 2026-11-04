@@ -1,8 +1,8 @@
 #!/bin/bash
 # ====================== 独立合并脚本：只合并远端2个zubo.enc，不跑IP扫描 ======================
 # 两个远端 zubo.enc 的 CF Pages 直链，改成你自己的
-ENC_URL1="https://xxx1.pages.dev/zubo.enc"
-ENC_URL2="https://xxx2.pages.dev/zubo.enc"
+ENC_URL1="https://raw.githubusercontent.com/ykyfy1/cs/refs/heads/main/zubo.enc"
+ENC_URL2="https://raw.githubusercontent.com/ykfy1/cs/refs/heads/main/zubo.enc"
 
 # 配置参数
 CITY_TOP_COUNT=30
