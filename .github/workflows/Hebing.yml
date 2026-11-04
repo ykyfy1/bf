@@ -36,4 +36,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npm install -g wrangler
-          wrangler pages deploy ./ --project-name=hebing --branch=hb
+          wrangler pages project create hb || true
+          wrangler pages deploy ./ --project-name=hb --branch=main
