@@ -1,0 +1,36 @@
+name: Hebing
+permissions:
+  contents: write
+on:
+  #schedule:
+    #- cron: "01 20 * * *"
+  workflow_dispatch:
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sed bc openssl curl tar || true
+
+      - name: 执行合并脚本
+        run: |
+          chmod +x Hebing.sh
+          ./Hebing.sh
+        env:
+          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
+
+      - name: 部署zubo.enc到Cloudflare Pages
+        uses: cloudflare/pages-action@1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: iptv
+          branch: main
+          workingDirectory: ./
