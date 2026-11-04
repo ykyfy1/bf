@@ -36,4 +36,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npm install -g wrangler
-          wrangler pages deploy ./ --project-name=iptv --branch=main
+          wrangler pages deploy ./ --project-name=hebing --branch=hb
