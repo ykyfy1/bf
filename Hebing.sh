@@ -16,12 +16,11 @@ curl -sL "${ENC_URL1}" -o repo1.enc || { echo "仓库1 enc下载失败"; exit 1;
 curl -sL "${ENC_URL2}" -o repo2.enc || { echo "仓库2 enc下载失败"; exit 1; }
 
 echo "===== 解密两个enc包 ====="
-# 远端enc加密的是单个zubo.txt，解密直接输出txt，不需要tar
-openssl enc -d -aes-256-cbc -in repo1.enc -out repo1.txt -k "${ENCRYPT_PASS}"
-openssl enc -d -aes-256-cbc -in repo2.enc -out repo2.txt -k "${ENCRYPT_PASS}"
+# 远端enc：openssl -aes-256-cbc -salt，没有-pbkdf2！
+openssl enc -d -aes-256-cbc -salt -in repo1.enc -out repo1.txt -k "${ENCRYPT_PASS}"
+openssl enc -d -aes-256-cbc -salt -in repo2.enc -out repo2.txt -k "${ENCRYPT_PASS}"
 
 echo "===== 远端源合并完成，开始同频道分组+按速度降序排序 ====="
-# 读取解密出来的两个txt文件
 awk -F',' '
 BEGIN{OFS="\t"}
 {
@@ -54,25 +53,22 @@ awk '!seen[$0]++' zubo.txt > zubo_tmp.txt && mv zubo_tmp.txt zubo.txt
 # 取合并后总前MERGE_TOP_COUNT条
 head -n ${MERGE_TOP_COUNT} zubo.txt > zubo_tmp.txt && mv zubo_tmp.txt zubo.txt
 
-# ===================== 新增：生成播放器可用的 zubo.m3u =====================
+# 生成播放器m3u（udp目前固定，后续采集脚本增加组播字段再优化）
 echo "#EXTM3U" > zubo.m3u
 while IFS= read -r line
 do
-    # 格式：IP,频道名,速度=xxKB
     ip=$(echo "$line" | cut -d',' -f1)
     name=$(echo "$line" | cut -d',' -f2)
-    # udp模板，和你采集仓库保持一致
     echo "#EXTINF:-1,${name}" >> zubo.m3u
     echo "http://${ip}/udp/239.255.255.250:1234" >> zubo.m3u
 done < zubo.txt
 
-# 把本次合并后的zubo.txt放入txt目录，用于打包加密
+# 打包加密备份（本脚本输出的zubo.enc仅作为仓库备份，不需要传到CF）
 cp zubo.txt ./txt/
-
 echo "===== 打包txt目录并加密生成zubo.enc ====="
 tar -cf zubo.tar ./txt
 openssl enc -aes-256-cbc -salt -in zubo.tar -out zubo.enc -k "${ENCRYPT_PASS}"
 
-# ✅ 删除明文，保留 zubo.m3u 和 zubo.enc
+# 清理明文，最终产物：zubo.m3u(给CF) 、 zubo.enc(本地备份)
 rm -rf txt zubo.tar zubo.txt repo1.enc repo2.enc repo1.txt repo2.txt
-echo "===== 合并加密完成，明文全部清除，保留 zubo.enc + zubo.m3u ====="
+echo "===== 合并完成，保留 zubo.enc + zubo.m3u ====="
