@@ -8,7 +8,7 @@ MERGE_TOP_COUNT=100
 MIN_SPEED_KB=30
 
 # 清理旧文件
-rm -rf txt repo1.enc repo2.enc repo1.tar repo2.tar repo1_txt repo2_txt zubo.tar zubo.enc zubo.txt
+rm -rf txt repo1.enc repo2.enc repo1.tar repo2.tar repo1_txt repo2_txt zubo.tar zubo.enc zubo.txt zubo.m3u
 mkdir -p txt
 
 echo "===== 下载远端两个加密包 ====="
@@ -65,10 +65,22 @@ awk '!seen[$0]++' zubo.txt > zubo_tmp.txt && mv zubo_tmp.txt zubo.txt
 # 取合并后总前MERGE_TOP_COUNT条
 head -n ${MERGE_TOP_COUNT} zubo.txt > zubo_tmp.txt && mv zubo_tmp.txt zubo.txt
 
+# ===================== 新增：生成播放器可用的 zubo.m3u =====================
+echo "#EXTM3U" > zubo.m3u
+while IFS= read -r line
+do
+    # 格式：IP,频道名,速度=xxKB
+    ip=$(echo "$line" | cut -d',' -f1)
+    name=$(echo "$line" | cut -d',' -f2)
+    # udp模板，和你采集仓库保持一致
+    echo "#EXTINF:-1,${name}" >> zubo.m3u
+    echo "http://${ip}/udp/239.255.255.250:1234" >> zubo.m3u
+done < zubo.txt
+
 echo "===== 打包txt目录并加密生成zubo.enc ====="
 tar -cf zubo.tar ./txt
 openssl enc -aes-256-cbc -salt -in zubo.tar -out zubo.enc -k "${ENCRYPT_PASS}"
 
-# ✅ 加密完成，删除全部明文！！
+# ✅ 删除明文，保留 zubo.m3u 和 zubo.enc
 rm -rf txt zubo.tar zubo.txt
-echo "===== 合并加密完成，明文全部清除，仅剩 zubo.enc ====="
+echo "===== 合并加密完成，明文全部清除，保留 zubo.enc + zubo.m3u ====="
