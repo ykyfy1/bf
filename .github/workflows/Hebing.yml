@@ -21,6 +21,8 @@ jobs:
 
       - name: 执行多仓库合并脚本
         run: |
+          # 移除Windows CRLF换行产生的^M符号，修复坏解释器
+          sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
           ./Hebing.sh
         env:
