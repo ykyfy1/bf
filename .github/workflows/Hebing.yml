@@ -26,11 +26,11 @@ jobs:
         env:
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
-      - name: 部署zubo.enc到Cloudflare Pages
+      - name: 部署文件到Cloudflare Pages
         uses: cloudflare/pages-action@1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: iptv
           branch: main
-          workingDirectory: ./
+          directory: ./
