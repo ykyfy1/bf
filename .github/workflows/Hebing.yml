@@ -32,3 +32,5 @@ jobs:
       - name: 部署到CF Pages
         run: |
           npx wrangler pages deploy . --project-name=hb --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
