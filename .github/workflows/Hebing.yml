@@ -25,8 +25,6 @@ jobs:
           M3U_URL1: ${{ secrets.M3U_URL1 }}
           M3U_URL2: ${{ secrets.M3U_URL2 }}
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
-          CF_USER: ${{ secrets.CF_USER }}
-          CF_PASS: ${{ secrets.CF_PASS }}
         run: |
           sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
