@@ -19,6 +19,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl openssl python3 python3-pip || true
           openssl version
+          python3 -m pip install requests
 
       - name: 执行合并脚本
         env:
@@ -29,6 +30,8 @@ jobs:
           ./Hebing.sh
           # 新增执行 merge.py
           python3 merge.py
+          # ✅关键：把merge.py输出的zubo.m3u覆盖到dist目录
+          cp zubo.m3u dist/
 
       - name: 部署到 Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
