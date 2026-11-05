@@ -1,7 +1,13 @@
 #!/bin/bash
-# ====================== HB合并脚本【原版下载｜仅demo排序】 ======================
+# ====================== HB合并脚本【多分组group-title，demo分段识别，频道模糊合并】 ======================
 # Github Secrets: M3U_URL_LIST  一行一个远端m3u链接
-# 根目录 demo.txt  一行一个频道名，用于自定义排序
+# demo.txt格式示例：
+# 公告,#genre#
+# 更新日期
+# 上海电信,#genre#
+# CCTV1
+# CCTV2
+# CCTV3
 
 # 配置参数
 CITY_TOP_COUNT=30
@@ -9,15 +15,14 @@ MERGE_TOP_COUNT=100
 MIN_SPEED_KB=30
 
 # 清理旧临时文件
-rm -rf txt repo*.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt
+rm -rf txt repo*.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt tmp_pack.txt tmp_ordered.txt demo_map.txt
 mkdir -p txt
 
 > tmp_all.txt
 echo "===== 读取远端链接列表并批量下载 ====="
 
-# =========【原版下载循环，完全不动，保证多链接正常读取】=========
+# =========【原版下载循环，完全不动】=========
 while IFS= read -r url; do
-  # 去除首尾空白，空行直接跳过
   url_trim=$(echo "$url" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   if [[ -z "$url_trim" ]];then
     continue
@@ -25,56 +30,83 @@ while IFS= read -r url; do
   echo "🔽 正在下载: ${url_trim}"
   fname="tmp_${RANDOM}.m3u"
   curl -sL "${url_trim}" -o "${fname}" || { echo "❌下载失败: ${url_trim}"; exit 1; }
-  # 删除#EXTM3U头部，其余内容追加到总文件
   sed '/^#EXTM3U/d' "${fname}" >> tmp_all.txt
   rm -f "${fname}"
 done <<< "${M3U_URL_LIST}"
 # ==============================================================
 
-# 1.读取demo.txt，记录频道排序序号
-declare -A demoOrder
-demoList=()
-idx=0
-while IFS= read -r line; do
-    lineTrim=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    [[ -z "$lineTrim" ]] && continue
-    idx=$((idx+1))
-    demoOrder["$lineTrim"]=$idx
-    demoList+=("$lineTrim")
-done < demo.txt
+# 第一步：解析demo.txt，生成【分组名称 + 频道顺序映射】
+# 输出格式： group名称 \t 清洗后的频道key \t 原始频道名 \t 排序编号
+awk '
+BEGIN{
+    current_group="未知分组"
+    sort_idx=0
+}
+{
+    line=$0
+    if (index(line,",#genre#")>0){
+        sub(/,#genre#/,"",line)
+        current_group = line
+        next
+    }
+    # 普通频道行
+    raw_chan = line
+    gsub(/[ -]/,"",raw_chan);
+    key=tolower(raw_chan);
+    sort_idx++;
+    print current_group "\t" key "\t" line "\t" sort_idx
+}' demo.txt > demo_map.txt
 
-# 2.解析全部m3u，按频道归类（同一个频道的所有线路合并在一起）
-declare -A chanData
-currentExt=""
-while IFS= read -r line; do
-    if [[ "$line" == "#EXTINF:"* ]];then
-        currentExt="$line"
-        #提取逗号后面的频道名称
-        chanName=$(echo "$currentExt" | sed -E 's/.*,(.+)$/\1/')
-        continue
-    fi
-    # 匹配URL行，把EXTINF+URL存入对应频道
-    if [[ -n "$currentExt" && "$line" != "#"* && -n "$line" ]];then
-        chanData["$chanName"]+="${currentExt}"$'\n'"${line}"$'\n'
-        currentExt=""
-    fi
-done < tmp_all.txt
+# 第二步：解析所有下载回来的m3u，提取频道、链接
+# 输出：清洗频道key \t 原始EXTINF \t URL
+awk '
+/^#EXTINF/ {
+    extinfo = $0
+    sub(/.*,/,"",extinfo);
+    chan_raw = extinfo
+    gsub(/[ -]/,"",chan_raw);
+    chan_key = tolower(chan_raw);
+    getline url;
+    print chan_key "\t" $0 "\t" url;
+    next;
+}
+' tmp_all.txt > tmp_pack.txt
 
-# 3.组装输出m3u
+# 第三步：关联demo分组+排序
+# 读取demo映射表，匹配频道，拿到所属分组和sortid
+awk -F"\t" '
+BEGIN{
+    while((getline<"demo_map.txt")>0){
+        g=$1; k=$2; name=$3; sid=$4
+        group_key[k]=g
+        sort_key[k]=sid
+    }
+    close("demo_map.txt")
+}
+{
+    ckey=$1; ext_raw=$2; url=$3;
+    if(ckey in group_key){
+        gname=group_key[ckey]
+        sid=sort_key[ckey]
+    }else{
+        gname="其他"
+        sid=9999
+    }
+    print sid "\t" gname "\t" ckey "\t" ext_raw "\t" url
+}
+' tmp_pack.txt | sort -n -k1,1 -k2,2 > tmp_ordered.txt
+
+# 第四步：组装最终m3u，自动写入 group-title=""
 echo "#EXTM3U" > zubo.txt
-
-# 第一部分：严格按照demo.txt里面的顺序输出频道
-for name in "${demoList[@]}"; do
-    if [[ -n "${chanData[$name]}" ]];then
-        echo -n "${chanData[$name]}" >> zubo.txt
-        unset chanData["$name"] #输出完毕移除，防止重复输出
-    fi
-done
-
-# 第二部分：demo.txt不存在的频道，全部追加到文件末尾
-for name in "${!chanData[@]}"; do
-    echo -n "${chanData[$name]}" >> zubo.txt
-done
+last_group=""
+while IFS=$'\t' read -r sortid gname ckey ext_raw url; do
+    # 提取原始频道名称（逗号后面）
+    chan_name="${ext_raw#*,}"
+    # 重写EXTINF，插入group-title
+    new_ext="#EXTINF:-1 group-title=\"${gname}\",${chan_name}"
+    echo "${new_ext}" >> zubo.txt
+    echo "${url}" >> zubo.txt
+done < tmp_ordered.txt
 
 cp zubo.txt zubo.m3u
 
@@ -131,5 +163,4 @@ cp -r functions dist/
 
 echo "==== 输出文件清单 ===="
 ls -la dist/
-echo "📝 tmp_all原始合并总行数：$(wc -l tmp_all.txt)"
 echo "✅ 合并脚本执行完成！m3u总行数：$(wc -l zubo.txt)"
