@@ -27,10 +27,12 @@ jobs:
           M3U_URL_LIST: ${{ secrets.M3U_URL_LIST }}
         run: |
           python3 merge.py
+          mkdir -p dist
+          cp zubo.m3u dist/
 
       - name: 使用wrangler部署到Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=${{ secrets.CF_PROJECT_NAME }}
+          command: pages deploy dist --project-name=${{ secrets.CF_PROJECT_NAME }} --commit-dirty=true
