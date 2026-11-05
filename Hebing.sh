@@ -1,6 +1,6 @@
 #!/bin/bash
-# 合并远端2个m3u，生成明文zubo.m3u(带Basic密码保护) + 加密包zubo.enc
-# 环境变量：M3U_URL1 M3U_URL2 ENCRYPT_PASS CF_USER CF_PASS
+# 合并远端2个m3u，生成明文zubo.m3u(CF BASIC鉴权) + 加密包zubo.enc
+# 环境变量：M3U_URL1 M3U_URL2 ENCRYPT_PASS
 
 # 清理旧文件
 rm -rf repo1.m3u repo2.m3u zubo.m3u zubo.enc _middleware.js
@@ -32,14 +32,13 @@ if [ $? -ne 0 ];then
 fi
 echo "✅加密完成，生成 zubo.enc"
 
-# 生成CF鉴权中间件，增加禁止缓存头，解决密码时有时无问题
+# 生成中间件，读取CF项目内 BASIC_AUTH_USERNAM / BASIC_AUTH_PASSWOR
 cat > _middleware.js <<'EOF'
 export async function onRequest({ request, next, env }) {
-  const USER = env.CF_USER;
-  const PASS = env.CF_PASS;
-  const authHeader = request.headers.get("authorization");
+  const USER = env.BASIC_AUTH_USERNAM;
+  const PASS = env.BASIC_AUTH_PASSWOR;
 
-  // 禁止缓存，修复鉴权时有时无
+  const authHeader = request.headers.get("authorization");
   const noCacheHeaders = {
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
     "Pragma": "no-cache",
@@ -61,7 +60,6 @@ export async function onRequest({ request, next, env }) {
   const pass = decoded[1]
   if (user === USER && pass === PASS) {
     const response = await next();
-    // 给成功返回的文件也加上无缓存头
     Object.entries(noCacheHeaders).forEach(([k,v])=>response.headers.set(k,v))
     return response;
   }
@@ -71,6 +69,6 @@ export async function onRequest({ request, next, env }) {
   })
 }
 EOF
-echo "✅生成带无缓存鉴权中间件 _middleware.js"
+echo "✅生成 _middleware.js，读取CF项目内置密钥"
 
 ls -lh zubo.m3u zubo.enc _middleware.js
