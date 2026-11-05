@@ -1,5 +1,5 @@
 #!/bin/bash
-# ====================== HB合并脚本【稳定输出版】修复行顺序错乱问题｜带容错鉴权middleware ======================
+# ====================== HB合并脚本【原版下载逻辑保留｜仅修改排序】 ======================
 # Github Secrets: M3U_URL_LIST  一行一个远端m3u链接
 # 根目录 demo.txt  一行一个频道名，用于自定义排序
 
@@ -15,7 +15,7 @@ mkdir -p txt
 > tmp_all.txt
 echo "===== 读取远端链接列表并批量下载 ====="
 
-# ==========【修复：进程替换，避免子shell丢失数据，支持多链接全部合并】==========
+# =====================【原版下载代码原样保留！！多链接正常读取】=====================
 while IFS= read -r url; do
   # 去除首尾空白，空行直接跳过
   url_trim=$(echo "$url" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
@@ -28,28 +28,29 @@ while IFS= read -r url; do
   # 删除#EXTM3U头部，其余内容追加到总文件
   sed '/^#EXTM3U/d' "${fname}" >> tmp_all.txt
   rm -f "${fname}"
-done < <(printf "%s\n" "${M3U_URL_LIST}")
-# ======================================================================
+done <<< "${M3U_URL_LIST}"
+# ==================================================================================
 
-# ===================== 改动部分：按demo顺序，同频道全部链接放一起 =====================
-# 1. 读取demo.txt，保存顺序，建立 频道名=>排序序号 映射
+# ===================== 【新增：只改这部分，实现按demo排序，同频道全部放一起】 =====================
+# 1.读取demo.txt，保存顺序
 declare -A chanOrder
+demoList=()
 orderIdx=0
 while IFS= read -r line; do
     lineTrim=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
     [[ -z "$lineTrim" ]] && continue
     chanOrder["$lineTrim"]=$orderIdx
-    demoList[$orderIdx]="$lineTrim"
+    demoList+=("$lineTrim")
     orderIdx=$((orderIdx+1))
 done < demo.txt
 
-# 2. 解析全部m3u，按频道归类：key=频道名，值=EXTINF+URL多行
+# 2.解析tmp_all.txt，按频道归类所有 #EXTINF + URL
 declare -A chanData
 currentExt=""
 while IFS= read -r line; do
     if [[ "$line" == "#EXTINF:"* ]];then
         currentExt="$line"
-        # 提取逗号后面频道名称
+        #提取逗号后面频道名称
         chanName=$(echo "$currentExt" | sed -E 's/.*,(.+)$/\1/')
         continue
     fi
@@ -59,16 +60,14 @@ while IFS= read -r line; do
     fi
 done < tmp_all.txt
 
-# 3. 按demo.txt顺序组装最终m3u
+# 3.按照demo.txt顺序输出
 echo "#EXTM3U" > zubo.txt
-for ((i=0; i<${#demoList[@]}; i++));do
-    name="${demoList[$i]}"
-    # 如果该频道收集到链接，一次性全部写入（同频道所有链接连续放一起）
+for name in "${demoList[@]}"; do
     if [[ -n "${chanData[$name]}" ]];then
         echo -n "${chanData[$name]}" >> zubo.txt
     fi
 done
-# ===================== 改动部分结束 =====================
+# ==================================================================================
 
 cp zubo.txt zubo.m3u
 
@@ -125,4 +124,5 @@ cp -r functions dist/
 
 echo "==== 输出文件清单 ===="
 ls -la dist/
+echo "📝 tmp_all原始合并总行数：$(wc -l tmp_all.txt)"
 echo "✅ 合并脚本执行完成！m3u总行数：$(wc -l zubo.txt)"
