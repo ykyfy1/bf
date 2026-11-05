@@ -1,67 +1,82 @@
 #!/bin/bash
-# ====================== HB合并脚本：按demo.txt频道优先级排序，保留#EXTINF+URL成对 ======================
-# Secrets：M3U_URL1 M3U_URL2，填入完整 https://user:pass@xxx.pages.dev/zubo.m3u
+# ====================== HB合并脚本｜不限数量远端M3U｜同频道归集｜模糊匹配demo排序｜全部IP保留 ======================
+# Github Secrets: M3U_URL_LIST  【一行一个链接，空行会自动跳过】
+# demo.txt 放仓库根目录，一行一个频道名
 
 # 配置参数
 CITY_TOP_COUNT=30
 MERGE_TOP_COUNT=100
 MIN_SPEED_KB=30
 
-# 清理旧文件
-rm -rf txt repo1.m3u repo2.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt tmp_ordered.txt
+# 清理旧临时文件
+rm -rf txt repo*.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt tmp_pack.txt tmp_ordered.txt demo_clean.txt
 mkdir -p txt
 
-echo "===== 下载远端两个m3u文件 ====="
-curl -sL "${M3U_URL1}" -o repo1.m3u || { echo "❌仓库1 m3u下载失败"; exit 1; }
-curl -sL "${M3U_URL2}" -o repo2.m3u || { echo "❌仓库2 m3u下载失败"; exit 2; }
-
-echo "repo1.m3u size: $(du -h repo1.m3u)"
-echo "repo2.m3u size: $(du -h repo2.m3u)"
-
-# 1.合并两个m3u，不去重，只去掉多余#EXTM3U
 > tmp_all.txt
-sed '/^#EXTM3U/d' repo1.m3u >> tmp_all.txt
-sed '/^#EXTM3U/d' repo2.m3u >> tmp_all.txt
+echo "===== 读取远端链接列表并批量下载 ====="
 
-# 2. 解析m3u，把 #EXTINF 和链接打包成一行，方便按频道名排序
+# 循环读取M3U_URL_LIST内每一行链接
+while IFS= read -r url; do
+  # 去除首尾空白，空行直接跳过
+  url_trim=$(echo "$url" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  if [[ -z "$url_trim" ]];then
+    continue
+  fi
+  echo "🔽 正在下载: ${url_trim}"
+  curl -sL "${url_trim}" -o "tmp_${RANDOM}.m3u" || { echo "❌下载失败: ${url_trim}"; exit 1; }
+  # 删除#EXTM3U，追加到总文件
+  sed '/^#EXTM3U/d' "tmp_${RANDOM}.m3u" >> tmp_all.txt
+done <<< "${M3U_URL_LIST}"
+
+# 预处理demo.txt：清洗名称，去除空格、横杠，转小写，记录排序序号
+awk '{
+    raw=$0
+    gsub(/[ -]/,"",raw);
+    key=tolower(raw);
+    idx++;
+    demo_sort[key]=idx;
+    demo_name[idx]=$0;
+}
+END{
+    for(i=1;i<=idx;i++) print demo_name[i] "\t" i
+}' demo.txt > demo_clean.txt
+
+# 解析m3u，提取EXTINF行、URL，生成清洗后的频道key用于分组
 awk '
 /^#EXTINF/ {
-    sub(/.*,/,"",$0);  #提取逗号后面频道名称
-    name=$0;
-    getline url;       #读取下一行播放地址
-    print name"\t"prev_line"\t"url;
-    prev_line=$0;
+    extinfo_full = $0
+    sub(/.*,/,"",extinfo_full);
+    chan_raw = extinfo_full
+    gsub(/[ -]/,"",chan_raw);
+    chan_key = tolower(chan_raw);
+    getline url_line;
+    print chan_key "\t" $0 "\t" url_line;
+    next;
 }
-{prev_line=$0}
 ' tmp_all.txt > tmp_pack.txt
 
-# 3. 使用demo.txt做优先级排序，demo内频道放前面，其余放后面
+# 分组归集：同一个频道的所有条目放一起；按demo顺序优先
 awk -F"\t" '
+# 加载demo排序表
 BEGIN{
-    #读取demo.txt预设顺序
-    if((getline<"demo.txt")>0){
-        demo_idx=0;
-        demo_name[$0]=++demo_idx;
-        while((getline<"demo.txt")>0){
-            demo_name[$0]=++demo_idx;
-        }
-        close("demo.txt");
+    while((getline<"demo_clean.txt")>0){
+        demo_key[$1]=$2
     }
+    close("demo_clean.txt")
 }
 {
-    chan_name=$1;
+    ckey=$1;
     extinfo=$2;
     url=$3;
-    if(chan_name in demo_name){
-        #在demo名单里，用demo序号作为排序key
-        sortkey=demo_name[chan_name];
+    if(ckey in demo_key){
+        sort_id = demo_key[ckey]
     }else{
-        #不在demo名单，放到末尾
-        sortkey=9999 + NR;
+        sort_id = 9999
     }
-    print sortkey"\t"extinfo"\n"url;
+    # sort_id控制demo顺序，ckey实现同频道归集
+    print sort_id "\t" ckey "\t" extinfo "\n" url
 }
-' tmp_pack.txt | sort -n | cut -f2- > tmp_ordered.txt
+' tmp_pack.txt | sort -n -k1,1 -k2,2 | cut -f3- > tmp_ordered.txt
 
 # 组装最终m3u
 > zubo.txt
@@ -102,7 +117,6 @@ export async function onRequest({ request, env, next }) {
   }
   const response = await next();
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
-  return response;
 }
 EOF
 
@@ -111,5 +125,5 @@ mkdir -p dist
 cp zubo.m3u index.html dist/
 cp -r functions dist/
 
-echo "✅ 合并完成！已按demo.txt频道名称顺序排序"
+echo "✅ 合并完成！不限数量远端M3U，同频道全部IP归集，模糊匹配"
 echo "==== 合并后总行数：$(wc -l zubo.txt)"
