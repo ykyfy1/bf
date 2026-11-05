@@ -22,8 +22,12 @@ jobs:
 
       - name: 执行合并脚本
         env:
-          M3U_URL1: ${{ secrets.M3U_URL1 }}
-          M3U_URL2: ${{ secrets.M3U_URL2 }}
+          M3U_HOST1: ${{ secrets.M3U_HOST1 }}
+          M3U_USER1: ${{ secrets.M3U_USER1 }}
+          M3U_PASS1: ${{ secrets.M3U_PASS1 }}
+          M3U_HOST2: ${{ secrets.M3U_HOST2 }}
+          M3U_USER2: ${{ secrets.M3U_USER2 }}
+          M3U_PASS2: ${{ secrets.M3U_PASS2 }}
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
         run: |
           sed -i 's/\r$//' Hebing.sh
@@ -33,6 +37,7 @@ jobs:
       - name: 部署到 Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy . --project-name=hb
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          # 重点：部署dist目录，不是根目录！和采集仓库保持一致
+          command: pages deploy dist --project-name=hb
