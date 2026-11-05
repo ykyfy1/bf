@@ -2,8 +2,6 @@ name: Hebing
 permissions:
   contents: write
 on:
-  #schedule:
-    #- cron: "0 20 * * *"
   workflow_dispatch:
 jobs:
   run-script:
@@ -14,23 +12,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 安装依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl openssl || true
-          openssl version
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-      - name: 执行合并脚本
+      - name: 安装python依赖
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: 执行Python合并脚本
         env:
           M3U_URL_LIST: ${{ secrets.M3U_URL_LIST }}
         run: |
-          sed -i 's/\r$//' Hebing.sh
-          chmod +x Hebing.sh
-          ./Hebing.sh
+          python3 merge.py
 
-      - name: 部署到 Cloudflare Pages
-        uses: cloudflare/wrangler-action@v4
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=hb
+          projectName: ${{ secrets.CF_PROJECT_NAME }}
+          directory: dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
