@@ -29,8 +29,11 @@ jobs:
           ENC_URL2: ${{ secrets.ENC_URL2 }}
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
-      - name: 部署到CF Pages
-        run: |
-          npx wrangler pages deploy . --project-name=hb --branch=main
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: hb
+          branch: main
+          directory: .
