@@ -3,8 +3,9 @@
 # 环境变量：M3U_URL1 M3U_URL2 ENCRYPT_PASS
 
 # 清理旧文件
-rm -rf repo1.m3u repo2.m3u zubo.m3u zubo.enc _middleware.js
+rm -rf repo1.m3u repo2.m3u zubo.m3u zubo.enc functions
 mkdir -p tmp
+mkdir -p functions
 
 echo "===== 下载远端两个 m3u ====="
 curl -sL "${M3U_URL1}" -o repo1.m3u || { echo "❌仓库1 m3u下载失败"; exit 1; }
@@ -32,8 +33,8 @@ if [ $? -ne 0 ];then
 fi
 echo "✅加密完成，生成 zubo.enc"
 
-# 生成中间件，读取CF项目内 BASIC_AUTH_USERNAM / BASIC_AUTH_PASSWOR
-cat > _middleware.js <<'EOF'
+# ========== 重点修改！！生成到 functions/_middleware.js ==========
+cat > functions/_middleware.js <<'EOF'
 export async function onRequest({ request, next, env }) {
   const USER = env.BASIC_AUTH_USERNAM;
   const PASS = env.BASIC_AUTH_PASSWOR;
@@ -69,6 +70,6 @@ export async function onRequest({ request, next, env }) {
   })
 }
 EOF
-echo "✅生成 _middleware.js，读取CF项目内置密钥"
+echo "✅生成鉴权中间件：functions/_middleware.js"
 
-ls -lh zubo.m3u zubo.enc _middleware.js
+ls -lh zubo.m3u zubo.enc functions/_middleware.js
