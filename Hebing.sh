@@ -32,14 +32,17 @@ if [ $? -ne 0 ];then
 fi
 echo "✅加密完成"
 
-# 生成【扫描仓库同款Basic鉴权】中间件，读取CF环境变量
+# 生成鉴权中间件【带调试日志，和扫描仓库同款BasicAuth】
 cat > functions/_middleware.js <<'EOF'
 export async function onRequest({ request, next, env }) {
   const USER = env.BASIC_AUTH_USERNAME;
   const PASS = env.BASIC_AUTH_PASSWORD;
 
+  console.log("【调试】env读取用户名:", USER);
+  console.log("【调试】env读取密码:", PASS);
+
   if (!USER || !PASS) {
-    return new Response("配置缺失", { status: 500 });
+    return new Response("配置缺失：环境变量为空", { status: 500 });
   }
 
   const authHeader = request.headers.get("Authorization");
@@ -57,6 +60,9 @@ export async function onRequest({ request, next, env }) {
 
   const base64Str = authHeader.split(" ")[1];
   const [username, password] = atob(base64Str).split(":");
+
+  console.log("【调试】用户提交用户名:", username);
+  console.log("【调试】用户提交密码:", password);
 
   if (username === USER && password === PASS) {
     const resp = await next();
