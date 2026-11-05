@@ -1,47 +1,30 @@
 #!/bin/bash
-# 直接合并两份远端m3u明文，不使用openssl加密解密
+# 合并远端2个m3u，合并后同时生成明文zubo.m3u 和加密 zubo.enc
+# 环境变量：M3U_URL1 M3U_URL2 ENCRYPT_PASS
 
-# 清理临时文件
-rm -rf src1.m3u src2.m3u merged.tmp final_body.tmp zubo.m3u
+# 清理旧文件
+rm -rf repo1.m3u repo2.m3u zubo.m3u zubo.enc
+mkdir -p tmp
 
-echo "===== 下载两份远端M3U源 ====="
-curl -sL --connect-timeout 20 "${M3U_URL1}" -o src1.m3u
-curl -sL --connect-timeout 20 "${M3U_URL2}" -o src2.m3u
+echo "===== 下载远端两个 m3u ====="
+curl -sL "${M3U_URL1}" -o repo1.m3u || { echo "❌仓库1 m3u下载失败"; exit 1; }
+curl -sL "${M3U_URL2}" -o repo2.m3u || { echo "❌仓库2 m3u下载失败"; exit 1; }
 
-# 校验下载是否成功
-if [ ! -s src1.m3u ]; then
-    echo "❌ M3U_URL1 下载失败或者内容为空"
-    exit 1
-fi
-if [ ! -s src2.m3u ]; then
-    echo "❌ M3U_URL2 下载失败或者内容为空"
-    exit 1
-fi
+echo "文件1大小: $(du -h repo1.m3u)"
+echo "文件2大小: $(du -h repo2.m3u)"
 
-echo "src1.m3u 行数：$(wc -l src1.m3u)"
-echo "src2.m3u 行数：$(wc -l src2.m3u)"
+# 合并 + 去重，只保留一次#EXTM3U
+{
+  echo "#EXTM3U"
+  grep -v "#EXTM3U" repo1.m3u
+  grep -v "#EXTM3U" repo2.m3u
+} | awk '!seen[$0]++' > zubo.m3u
 
-# 去除两份文件里的 #EXTM3U 表头
-grep -v '^#EXTM3U' src1.m3u > merged.tmp
-grep -v '^#EXTM3U' src2.m3u >> merged.tmp
+echo "✅m3u合并完成，输出 zubo.m3u"
+echo "m3u最终行数：$(wc -l zubo.m3u)"
 
-# 根据播放URL去重，同一个链接只保留第一次出现
-awk '
-/^#EXTINF/ {
-    inf=$0
-    getline url
-    if (!seen[url]++) {
-        print inf
-        print url
-    }
-}
-' merged.tmp > final_body.tmp
+# AES-256-CBC 加密，和扫描仓库加密参数保持一致（解密必须用同样参数）
+openssl enc -aes-256-cbc -md md5 -in zubo.m3u -out zubo.enc -k "${ENCRYPT_PASS}"
 
-# 组装最终输出m3u
-echo "#EXTM3U" > zubo.m3u
-cat final_body.tmp >> zubo.m3u
-
-echo "✅ 合并完成，输出 zubo.m3u 总行数：$(wc -l zubo.m3u)"
-
-# 删除临时文件
-rm -rf src1.m3u src2.m3u merged.tmp final_body.tmp
+echo "✅加密完成，生成 zubo.enc"
+ls -lh zubo.m3u zubo.enc
