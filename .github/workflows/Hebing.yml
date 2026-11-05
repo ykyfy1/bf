@@ -30,10 +30,8 @@ jobs:
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: hb
-          branch: main
-          directory: .
+          command: pages deploy . --project-name=hb --branch=main
