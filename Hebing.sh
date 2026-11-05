@@ -1,5 +1,5 @@
 #!/bin/bash
-# ====================== HB合并脚本｜不限数量远端M3U｜同频道归集｜模糊匹配demo排序｜全部IP保留 ======================
+# ====================== HB合并脚本｜不限数量远端M3U｜修复随机文件名BUG｜同频道归集｜模糊匹配demo排序｜全部IP保留 ======================
 # Github Secrets: M3U_URL_LIST  【一行一个链接，空行会自动跳过】
 # demo.txt 放仓库根目录，一行一个频道名
 
@@ -23,9 +23,11 @@ while IFS= read -r url; do
     continue
   fi
   echo "🔽 正在下载: ${url_trim}"
-  curl -sL "${url_trim}" -o "tmp_${RANDOM}.m3u" || { echo "❌下载失败: ${url_trim}"; exit 1; }
+  fname="tmp_${RANDOM}.m3u"
+  curl -sL "${url_trim}" -o "${fname}" || { echo "❌下载失败: ${url_trim}"; exit 1; }
   # 删除#EXTM3U，追加到总文件
-  sed '/^#EXTM3U/d' "tmp_${RANDOM}.m3u" >> tmp_all.txt
+  sed '/^#EXTM3U/d' "${fname}" >> tmp_all.txt
+  rm -f "${fname}"
 done <<< "${M3U_URL_LIST}"
 
 # 预处理demo.txt：清洗名称，去除空格、横杠，转小写，记录排序序号
