@@ -2,11 +2,9 @@ name: Hebing
 permissions:
   contents: write
 on:
+  #schedule:
+    #- cron: "0 20 * * *"
   workflow_dispatch:
-env:
-  # 在这里注入CF标准环境变量，wrangler识别CLOUDFLARE_开头变量
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 jobs:
   run-script:
     runs-on: ubuntu-latest
@@ -16,44 +14,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      - name: 安装系统依赖
+      - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y sed curl
-          python -m pip install requests
+          sudo apt-get install -y curl openssl python3 python3-pip || true
+          openssl version
 
-      - name: 执行Python合并脚本
+      - name: 执行合并脚本
         env:
           M3U_URL_LIST: ${{ secrets.M3U_URL_LIST }}
-          BASIC_USER: ${{ secrets.BASIC_USER }}
-          BASIC_PASS: ${{ secrets.BASIC_PASS }}
         run: |
+          sed -i 's/\r$//' Hebing.sh
+          chmod +x Hebing.sh
+          ./Hebing.sh
+          # 新增执行 merge.py
           python3 merge.py
-          mkdir -p dist
-          cp zubo.m3u dist/
-          RAW="${BASIC_USER}:${BASIC_PASS}"
-          B64=$(echo -n "$RAW" | base64)
-          echo 'export async function onRequest({ request, next }) {' > dist/_middleware.js
-          echo '  const auth = request.headers.get("authorization") || "";' >> dist/_middleware.js
-          echo '  const validAuth = "Basic '${B64}'";' >> dist/_middleware.js
-          echo '  if (auth !== validAuth) {' >> dist/_middleware.js
-          echo '    return new Response("Unauthorized", {' >> dist/_middleware.js
-          echo '      status: 401,' >> dist/_middleware.js
-          echo '      headers: {' >> dist/_middleware.js
-          echo '        "WWW-Authenticate": "Basic realm=\"Access\"",' >> dist/_middleware.js
-          echo '        "Cache-Control": "no-store, no-cache, must-revalidate"' >> dist/_middleware.js
-          echo '      }' >> dist/_middleware.js
-          echo '    })' >> dist/_middleware.js
-          echo '  }' >> dist/_middleware.js
-          echo '  return await next();' >> dist/_middleware.js
-          echo '}' >> dist/_middleware.js
 
-      - name: 使用wrangler部署到Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+      - name: 部署到 Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
         with:
-          command: pages deploy dist --project-name=${{ secrets.CF_PROJECT_NAME }} --commit-dirty=true
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=hb
