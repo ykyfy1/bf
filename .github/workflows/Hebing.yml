@@ -3,7 +3,7 @@ permissions:
   contents: write
 on:
   #schedule:
-    #- cron: "01 20 * * *"
+    #- cron: "0 20 * * *"
   workflow_dispatch:
 jobs:
   run-script:
@@ -14,63 +14,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 安装系统依赖(bc,sed,openssl,curl等)
+      - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y sed bc openssl curl || true
+          sudo apt-get install -y curl openssl || true
+          openssl version
 
-      - name: 执行合并脚本（下载2个远端m3u，合并输出zubo.txt）
+      - name: 执行合并脚本
+        env:
+          M3U_URL1: ${{ secrets.M3U_URL1 }}
+          M3U_URL2: ${{ secrets.M3U_URL2 }}
+          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
         run: |
           sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
           ./Hebing.sh
-        env:
-          ENC_URL1: ${{ secrets.ENC_URL1 }}
-          ENC_URL2: ${{ secrets.ENC_URL2 }}
-          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
-      # 复制明文生成 zubo.m3u 给CF部署
-      - name: 准备CF部署文件
-        run: |
-          cp zubo.txt zubo.m3u
-          echo "✅ 已生成合并后的 zubo.m3u"
-          echo "<pre>IPTV源合并结果：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
-          echo "✅ 生成index.html兜底页面"
-
-      # =========【部署步骤删掉，改为靠CF自动监听github仓库更新】=========
-
-      # =========【部署完成后，再加密生成zubo.enc】=========
-      - name: 加密zubo.txt生成zubo.enc
-        run: |
-          log_print() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
-          if [ -f "zubo.txt" ] && [ -s "zubo.txt" ]; then
-            log_print "检测到zubo.txt，开始加密生成 zubo.enc"
-            openssl enc -aes-256-cbc -salt -in zubo.txt -out zubo.enc -k "$ENCRYPT_PASS"
-            if [ $? -eq 0 ] && [ -f "zubo.enc" ] && [ -s "zubo.enc" ]; then
-              log_print "✅ 加密成功，删除明文 zubo.txt"
-              rm -f zubo.txt
-            else
-              log_print "❌ 加密失败，保留明文zubo.txt用于排查问题"
-            fi
-          else
-            log_print "zubo.txt 文件为空或不存在，跳过加密，不生成zubo.enc"
-          fi
-        env:
-          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
-
-      # 提交加密文件回Github仓库（zubo.enc保存到github，不保存明文）
-      - name: 提交文件回仓库
-        run: |
-          cd $GITHUB_WORKSPACE
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git reset HEAD .
-          # 重点：zubo.m3u 和 index.html 提交回github，给CF Pages读取部署！
-          if [[ -n $(git status --porcelain zubo.m3u index.html zubo.enc) ]]; then
-            echo "✅ 检测文件更新，提交回仓库"
-            git add zubo.m3u index.html zubo.enc
-            git commit -m "🤖 合并脚本自动更新 ${{ github.run_id }}"
-            git push
-          else
-            echo "ℹ️ 文件无变更，跳过提交"
-          fi
+      - name: 部署到 Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy . --project-name=hb
