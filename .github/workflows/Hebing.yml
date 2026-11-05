@@ -22,8 +22,7 @@ jobs:
 
       - name: 执行合并脚本
         env:
-          M3U_URL1: ${{ secrets.M3U_URL1 }}
-          M3U_URL2: ${{ secrets.M3U_URL2 }}
+          M3U_URL_LIST: ${{ secrets.M3U_URL_LIST }}
         run: |
           sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
