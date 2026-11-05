@@ -1,5 +1,5 @@
 #!/bin/bash
-# ====================== HB合并脚本｜不限数量远端M3U｜修复随机文件名BUG｜同频道归集｜模糊匹配demo排序｜全部IP保留 ======================
+# ====================== HB合并脚本｜不限数量远端M3U｜修复随机文件名BUG｜修复middleware崩溃问题｜同频道归集｜模糊匹配demo排序｜全部IP保留 ======================
 # Github Secrets: M3U_URL_LIST  【一行一个链接，空行会自动跳过】
 # demo.txt 放仓库根目录，一行一个频道名
 
@@ -89,14 +89,16 @@ cp zubo.txt zubo.m3u
 # 生成index.html兜底页面
 echo "<pre>IPTV源：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
 
-# =========【扫描仓库同款鉴权 + 关闭CF缓存，解决密码时有时无】=========
+# =========【修复容错版鉴权middleware，防止1101崩溃】=========
 mkdir -p functions
 cat > functions/_middleware.js <<'EOF'
 export async function onRequest({ request, env, next }) {
   const username = env.BASIC_AUTH_USERNAME;
   const password = env.BASIC_AUTH_PASSWORD;
 
-  if (!username || !password) return next();
+  if (!username || !password) {
+    return await next();
+  }
 
   const authHeader = request.headers.get("authorization");
   if (!authHeader) {
@@ -109,16 +111,24 @@ export async function onRequest({ request, env, next }) {
     });
   }
 
-  const [, base64] = authHeader.split(" ");
-  const [user, pass] = atob(base64).split(":");
-  if (user !== username || pass !== password) {
+  try {
+    const [scheme, base64] = authHeader.split(" ");
+    if (scheme.toLowerCase() !== "basic" || !base64) throw new Error("auth error");
+    const decoded = atob(base64);
+    const [user, pass] = decoded.split(":");
+    if (user !== username || pass !== password) {
+      throw new Error("wrong password");
+    }
+  } catch (e) {
     return new Response("账号密码错误", {
       status: 401,
       headers: { "Cache-Control": "no-store, no-cache, must-revalidate" }
     });
   }
+
   const response = await next();
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  return response;
 }
 EOF
 
@@ -126,6 +136,9 @@ EOF
 mkdir -p dist
 cp zubo.m3u index.html dist/
 cp -r functions dist/
+
+echo "==== 检查dist目录文件列表 ===="
+ls -la dist/
 
 echo "✅ 合并完成！不限数量远端M3U，同频道全部IP归集，模糊匹配"
 echo "==== 合并后总行数：$(wc -l zubo.txt)"
