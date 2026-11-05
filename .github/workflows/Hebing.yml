@@ -37,14 +37,7 @@ jobs:
           echo "<pre>IPTV源合并结果：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
           echo "✅ 生成index.html兜底页面"
 
-      # =========【和扫描仓库一模一样：先部署CF Pages】=========
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v4
-        continue-on-error: true
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy . --project-name=hb
+      # =========【部署步骤删掉，改为靠CF自动监听github仓库更新】=========
 
       # =========【部署完成后，再加密生成zubo.enc】=========
       - name: 加密zubo.txt生成zubo.enc
@@ -66,17 +59,18 @@ jobs:
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
       # 提交加密文件回Github仓库（zubo.enc保存到github，不保存明文）
-      - name: 提交加密文件回仓库
+      - name: 提交文件回仓库
         run: |
           cd $GITHUB_WORKSPACE
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git reset HEAD .
-          if [[ -n $(git status --porcelain zubo.enc) ]]; then
-            echo "✅ 检测zubo.enc更新，提交回仓库"
-            git add zubo.enc
-            git commit -m "🤖 合并脚本自动更新 zubo.enc ${{ github.run_id }}"
+          # 重点：zubo.m3u 和 index.html 提交回github，给CF Pages读取部署！
+          if [[ -n $(git status --porcelain zubo.m3u index.html zubo.enc) ]]; then
+            echo "✅ 检测文件更新，提交回仓库"
+            git add zubo.m3u index.html zubo.enc
+            git commit -m "🤖 合并脚本自动更新 ${{ github.run_id }}"
             git push
           else
-            echo "ℹ️ zubo.enc无变更，跳过提交"
+            echo "ℹ️ 文件无变更，跳过提交"
           fi
