@@ -1,6 +1,6 @@
 #!/bin/bash
-# 合并远端2个m3u，生成明文zubo.m3u、加密包zubo.enc，自动生成鉴权中间件
-# 环境变量：M3U_URL1 M3U_URL2 ENCRYPT_PASS
+# 合并远端2个m3u，生成明文zubo.m3u(带Basic密码保护) + 加密包zubo.enc
+# 环境变量：M3U_URL1 M3U_URL2 ENCRYPT_PASS CF_USER CF_PASS
 
 # 清理旧文件
 rm -rf repo1.m3u repo2.m3u zubo.m3u zubo.enc _middleware.js
@@ -23,7 +23,7 @@ echo "文件2大小: $(du -h repo2.m3u)"
 echo "✅m3u合并完成，输出 zubo.m3u"
 echo "m3u最终行数：$(wc -l zubo.m3u)"
 
-# AES-256-CBC 文件加密（给其他仓库拉取解密用）
+# AES-256-CBC 文件加密，生成zubo.enc（供其他仓库拉取解密合并）
 echo "开始加密..."
 openssl enc -aes-256-cbc -md md5 -in zubo.m3u -out zubo.enc -k "${ENCRYPT_PASS}"
 if [ $? -ne 0 ];then
@@ -32,16 +32,27 @@ if [ $? -ne 0 ];then
 fi
 echo "✅加密完成，生成 zubo.enc"
 
-# ========== 新增：Basic密码访问保护，打开网页链接要账号密码 ==========
+# 生成CF鉴权中间件，增加禁止缓存头，解决密码时有时无问题
 cat > _middleware.js <<'EOF'
-export async function onRequest({ request, next }) {
-  const USER = "admin"
-  const PASS = "123456"
-  const authHeader = request.headers.get("authorization")
+export async function onRequest({ request, next, env }) {
+  const USER = env.CF_USER;
+  const PASS = env.CF_PASS;
+  const authHeader = request.headers.get("authorization");
+
+  // 禁止缓存，修复鉴权时有时无
+  const noCacheHeaders = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+  };
+
   if (!authHeader) {
-    return new Response("需要密码", {
+    return new Response("需要登录", {
       status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Login"' }
+      headers: {
+        "WWW-Authenticate": 'Basic realm="需要密码访问"',
+        ...noCacheHeaders
+      }
     })
   }
   const [, base64] = authHeader.split(" ")
@@ -49,11 +60,17 @@ export async function onRequest({ request, next }) {
   const user = decoded[0]
   const pass = decoded[1]
   if (user === USER && pass === PASS) {
-    return next()
+    const response = await next();
+    // 给成功返回的文件也加上无缓存头
+    Object.entries(noCacheHeaders).forEach(([k,v])=>response.headers.set(k,v))
+    return response;
   }
-  return new Response("账号密码错误", { status: 401 })
+  return new Response("账号密码错误", {
+    status: 401,
+    headers: noCacheHeaders
+  })
 }
 EOF
-echo "✅生成鉴权中间件 _middleware.js"
+echo "✅生成带无缓存鉴权中间件 _middleware.js"
 
 ls -lh zubo.m3u zubo.enc _middleware.js
