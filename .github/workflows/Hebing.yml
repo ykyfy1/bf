@@ -25,8 +25,9 @@ jobs:
           chmod +x Hebing.sh
           ./Hebing.sh
         env:
-          ENC_URL1: ${{ secrets.ENC_URL1 }}
-          ENC_URL2: ${{ secrets.ENC_URL2 }}
+          # 重点修正：读取仓库里 M3U_URL1 / M3U_URL2，映射给脚本内 ENC_URL1、ENC_URL2
+          ENC_URL1: ${{ secrets.M3U_URL1 }}
+          ENC_URL2: ${{ secrets.M3U_URL2 }}
           ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
       # 准备部署文件
@@ -35,7 +36,6 @@ jobs:
           cp zubo.txt zubo.m3u
           echo "✅ 已生成合并后的 zubo.m3u"
           echo "<pre>IPTV源合并结果：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
-          echo "✅ 生成index.html兜底页面"
 
       # 强制git分支上下文，解决wrangler分支识别异常
       - name: 强制设置git分支信息
