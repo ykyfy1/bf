@@ -15,8 +15,8 @@ mkdir -p txt
 > tmp_all.txt
 echo "===== 读取远端链接列表并批量下载 ====="
 
-# 循环读取M3U_URL_LIST内每一行链接
-while IFS= read -r url; do
+# ==========【修复：读取多行M3U_URL_LIST，支持多个链接】==========
+printf "%s\n" "${M3U_URL_LIST}" | while IFS= read -r url; do
   # 去除首尾空白，空行直接跳过
   url_trim=$(echo "$url" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
   if [[ -z "$url_trim" ]];then
@@ -28,9 +28,10 @@ while IFS= read -r url; do
   # 删除#EXTM3U头部，其余内容追加到总文件
   sed '/^#EXTM3U/d' "${fname}" >> tmp_all.txt
   rm -f "${fname}"
-done <<< "${M3U_URL_LIST}"
+done
+# ==============================================================
 
-# ===================== 改动部分开始 =====================
+# ===================== 改动部分：按demo顺序，同频道全部链接放一起 =====================
 # 1. 读取demo.txt，保存顺序，建立 频道名=>排序序号 映射
 declare -A chanOrder
 orderIdx=0
