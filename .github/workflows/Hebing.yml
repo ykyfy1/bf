@@ -3,7 +3,7 @@ permissions:
   contents: write
 on:
   #schedule:
-    #- cron: "01 20 * * *"
+    #- cron: "0 20 * * *"
   workflow_dispatch:
 jobs:
   run-script:
@@ -14,85 +14,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 安装系统依赖(bc,sed,openssl,curl等)
+      - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y sed bc openssl curl || true
+          sudo apt-get install -y curl openssl || true
+          openssl version
 
-      - name: 执行合并脚本（下载2个远端m3u，合并输出zubo.txt）
+      - name: 执行合并脚本
+        env:
+          M3U_URL1: ${{ secrets.M3U_URL1 }}
+          M3U_URL2: ${{ secrets.M3U_URL2 }}
+          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
         run: |
           sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
           ./Hebing.sh
-        env:
-          # 重点修正：读取仓库里 M3U_URL1 / M3U_URL2，映射给脚本内 ENC_URL1、ENC_URL2
-          ENC_URL1: ${{ secrets.M3U_URL1 }}
-          ENC_URL2: ${{ secrets.M3U_URL2 }}
-          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
-      # 准备部署文件
-      - name: 准备CF部署文件
-        run: |
-          cp zubo.txt zubo.m3u
-          echo "✅ 已生成合并后的 zubo.m3u"
-          echo "<pre>IPTV源合并结果：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
-
-      # 强制git分支上下文，解决wrangler分支识别异常
-      - name: 强制设置git分支信息
-        run: |
-          git config --global init.defaultBranch main
-          git checkout -b main || true
-
-      # CF API连通调试（方便看token是否正常读取）
-      - name: 调试CF Pages API连通测试
-        run: |
-          curl -X GET "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/hb" \
-          -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      # 部署到CF Pages，修正secret变量名，固定wrangler版本
-      - name: Deploy to Cloudflare Pages
+      - name: 部署到 Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
-        continue-on-error: true
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.157.0"
-          command: pages deploy . --project-name=hb --branch=main --yes
-
-      # 加密生成zubo.enc
-      - name: 加密zubo.txt生成zubo.enc
-        run: |
-          log_print() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"; }
-          if [ -f "zubo.txt" ] && [ -s "zubo.txt" ]; then
-            log_print "检测到zubo.txt，开始加密生成 zubo.enc"
-            openssl enc -aes-256-cbc -salt -in zubo.txt -out zubo.enc -k "${ENCRYPT_PASS}"
-            if [ $? -eq 0 ] && [ -f "zubo.enc" ] && [ -s "zubo.enc" ]; then
-              log_print "✅ 加密成功，删除明文 zubo.txt"
-              rm -f zubo.txt
-            else
-              log_print "❌ 加密失败，保留明文zubo.txt用于排查问题"
-            fi
-          else
-            log_print "zubo.txt 文件为空或者不存在，跳过加密"
-          fi
-        env:
-          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
-
-      # 提交文件回仓库
-      - name: 提交文件回仓库
-        run: |
-          cd $GITHUB_WORKSPACE
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git reset HEAD .
-          if [[ -n $(git status --porcelain zubo.m3u index.html zubo.enc) ]]; then
-            echo "✅ 检测文件更新，提交回仓库"
-            git add zubo.m3u index.html zubo.enc
-            git commit -m "🤖 合并脚本自动更新 ${{ github.run_id }}"
-            git push
-          else
-            echo "ℹ️ 文件无变更，跳过提交"
-          fi
+          command: pages deploy . --project-name=hb
