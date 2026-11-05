@@ -1,5 +1,5 @@
 #!/bin/bash
-# ====================== HB合并脚本【原版下载逻辑保留｜仅修改排序】 ======================
+# ====================== HB合并脚本【原版下载｜仅demo排序】 ======================
 # Github Secrets: M3U_URL_LIST  一行一个远端m3u链接
 # 根目录 demo.txt  一行一个频道名，用于自定义排序
 
@@ -9,13 +9,13 @@ MERGE_TOP_COUNT=100
 MIN_SPEED_KB=30
 
 # 清理旧临时文件
-rm -rf txt repo*.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt tmp_pack.txt demo_clean.txt
+rm -rf txt repo*.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt
 mkdir -p txt
 
 > tmp_all.txt
 echo "===== 读取远端链接列表并批量下载 ====="
 
-# =====================【原版下载代码原样保留！！多链接正常读取】=====================
+# =========【原版下载循环，完全不动，保证多链接正常读取】=========
 while IFS= read -r url; do
   # 去除首尾空白，空行直接跳过
   url_trim=$(echo "$url" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
@@ -29,45 +29,52 @@ while IFS= read -r url; do
   sed '/^#EXTM3U/d' "${fname}" >> tmp_all.txt
   rm -f "${fname}"
 done <<< "${M3U_URL_LIST}"
-# ==================================================================================
+# ==============================================================
 
-# ===================== 【新增：只改这部分，实现按demo排序，同频道全部放一起】 =====================
-# 1.读取demo.txt，保存顺序
-declare -A chanOrder
+# 1.读取demo.txt，记录频道排序序号
+declare -A demoOrder
 demoList=()
-orderIdx=0
+idx=0
 while IFS= read -r line; do
     lineTrim=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
     [[ -z "$lineTrim" ]] && continue
-    chanOrder["$lineTrim"]=$orderIdx
+    idx=$((idx+1))
+    demoOrder["$lineTrim"]=$idx
     demoList+=("$lineTrim")
-    orderIdx=$((orderIdx+1))
 done < demo.txt
 
-# 2.解析tmp_all.txt，按频道归类所有 #EXTINF + URL
+# 2.解析全部m3u，按频道归类（同一个频道的所有线路合并在一起）
 declare -A chanData
 currentExt=""
 while IFS= read -r line; do
     if [[ "$line" == "#EXTINF:"* ]];then
         currentExt="$line"
-        #提取逗号后面频道名称
+        #提取逗号后面的频道名称
         chanName=$(echo "$currentExt" | sed -E 's/.*,(.+)$/\1/')
         continue
     fi
+    # 匹配URL行，把EXTINF+URL存入对应频道
     if [[ -n "$currentExt" && "$line" != "#"* && -n "$line" ]];then
         chanData["$chanName"]+="${currentExt}"$'\n'"${line}"$'\n'
         currentExt=""
     fi
 done < tmp_all.txt
 
-# 3.按照demo.txt顺序输出
+# 3.组装输出m3u
 echo "#EXTM3U" > zubo.txt
+
+# 第一部分：严格按照demo.txt里面的顺序输出频道
 for name in "${demoList[@]}"; do
     if [[ -n "${chanData[$name]}" ]];then
         echo -n "${chanData[$name]}" >> zubo.txt
+        unset chanData["$name"] #输出完毕移除，防止重复输出
     fi
 done
-# ==================================================================================
+
+# 第二部分：demo.txt不存在的频道，全部追加到文件末尾
+for name in "${!chanData[@]}"; do
+    echo -n "${chanData[$name]}" >> zubo.txt
+done
 
 cp zubo.txt zubo.m3u
 
