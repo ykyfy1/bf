@@ -1,7 +1,6 @@
 #!/bin/bash
-# ====================== HB合并仓库脚本：合并远端2个m3u，增加CF鉴权中间件生成 ======================
-# 读取M3U_HOST1 M3U_USER1 M3U_PASS1 M3U_HOST2 M3U_USER2 M3U_PASS2
-# 生成functions/_middleware.js 用于CF Pages BasicAuth密码保护，和采集仓库鉴权逻辑一模一样
+# ====================== HB合并仓库脚本【和扫描仓库保持一致访问方式】 ======================
+# Secrets：M3U_URL1 M3U_URL2，直接填入完整 https://user:pass@xxx.pages.dev/zubo.m3u
 
 # 配置参数
 CITY_TOP_COUNT=30
@@ -13,9 +12,9 @@ rm -rf txt repo1.m3u repo2.m3u zubo.txt zubo.m3u index.html functions dist
 mkdir -p txt
 
 echo "===== 下载远端两个m3u文件 ====="
-# 使用curl -u 鉴权，不再把账号密码塞URL，避开URL特殊字符问题
-curl -sL -u "${M3U_USER1}:${M3U_PASS1}" "https://${M3U_HOST1}/zubo.m3u" -o repo1.m3u || { echo "❌仓库1 m3u下载失败"; exit 1; }
-curl -sL -u "${M3U_USER2}:${M3U_PASS2}" "https://${M3U_HOST2}/zubo.m3u" -o repo2.m3u || { echo "❌仓库2 m3u下载失败"; exit 2; }
+# 和扫描仓库同源：直接使用完整带BasicAuth的URL
+curl -sL "${M3U_URL1}" -o repo1.m3u || { echo "❌仓库1 m3u下载失败"; exit 1; }
+curl -sL "${M3U_URL2}" -o repo2.m3u || { echo "❌仓库2 m3u下载失败"; exit 2; }
 
 echo "repo1.m3u size: $(du -h repo1.m3u)"
 echo "repo2.m3u size: $(du -h repo2.m3u)"
@@ -39,8 +38,8 @@ cp zubo.txt zubo.m3u
 # 生成index.html兜底页面
 echo "<pre>IPTV源：<a href='./zubo.m3u'>zubo.m3u</a></pre>" > index.html
 
-# =========【重点：移植采集仓库的鉴权中间件，生成functions/_middleware.js】=========
-# CF Pages Function必须放在根目录 functions 文件夹
+# =========【完全照搬扫描仓库的鉴权中间件，一字不变】=========
+# CF Pages Function放在根目录functions
 mkdir -p functions
 cat > functions/_middleware.js <<'EOF'
 export async function onRequest({ request, env, next }) {
@@ -71,5 +70,5 @@ mkdir -p dist
 cp zubo.m3u index.html dist/
 cp -r functions dist/
 
-echo "✅ 合并完成！输出dist/zubo.m3u，鉴权中间件已生成"
+echo "✅ 合并完成！输出dist/zubo.m3u，鉴权中间件和扫描仓库完全一致"
 echo "==== 合并后总行数：$(wc -l zubo.txt)"
