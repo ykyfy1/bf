@@ -3,7 +3,7 @@ permissions:
   contents: write
 on:
   #schedule:
-    #- cron: "01 20 * * *"
+    #- cron: "0 20 * * *"
   workflow_dispatch:
 jobs:
   run-script:
@@ -14,28 +14,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 安装系统依赖
+      - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y sed bc openssl curl tar || true
+          sudo apt-get install -y curl openssl || true
+          openssl version
 
-      - name: 执行合并脚本Hebing.sh
+      - name: 执行合并脚本
+        env:
+          M3U_URL1: ${{ secrets.M3U_URL1 }}
+          M3U_URL2: ${{ secrets.M3U_URL2 }}
+          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
         run: |
-          # 修复Windows换行符^M
           sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
           ./Hebing.sh
-        env:
-          ENC_URL1: ${{ secrets.ENC_URL1 }}
-          ENC_URL2: ${{ secrets.ENC_URL2 }}
-          ENCRYPT_PASS: ${{ secrets.ENCRYPT_PASS }}
 
-      - name: 安装Wrangler CLI
-        run: npm install -g wrangler
-
-      - name: 部署到Cloudflare Pages【生产环境】
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          wrangler pages deploy . --project-name=hb --branch=main --production
+      - name: 部署到 Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy . --project-name=hb
