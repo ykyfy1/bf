@@ -1,5 +1,5 @@
 #!/bin/bash
-# ====================== HB合并仓库脚本【完全保留源文件内部顺序，原样拼接，同扫描仓库鉴权+关闭CF缓存】 ======================
+# ====================== HB合并脚本：按demo.txt频道优先级排序，保留#EXTINF+URL成对 ======================
 # Secrets：M3U_URL1 M3U_URL2，填入完整 https://user:pass@xxx.pages.dev/zubo.m3u
 
 # 配置参数
@@ -8,28 +8,65 @@ MERGE_TOP_COUNT=100
 MIN_SPEED_KB=30
 
 # 清理旧文件
-rm -rf txt repo1.m3u repo2.m3u zubo.txt zubo.m3u index.html functions dist
+rm -rf txt repo1.m3u repo2.m3u zubo.txt zubo.m3u index.html functions dist tmp_all.txt tmp_ordered.txt
 mkdir -p txt
 
 echo "===== 下载远端两个m3u文件 ====="
-# 和扫描仓库同源：直接使用完整带BasicAuth的URL
 curl -sL "${M3U_URL1}" -o repo1.m3u || { echo "❌仓库1 m3u下载失败"; exit 1; }
 curl -sL "${M3U_URL2}" -o repo2.m3u || { echo "❌仓库2 m3u下载失败"; exit 2; }
 
 echo "repo1.m3u size: $(du -h repo1.m3u)"
 echo "repo2.m3u size: $(du -h repo2.m3u)"
 
-# ========== 合并逻辑：保留两个文件各自内部原有顺序，仅剔除多余 #EXTM3U ==========
+# 1.合并两个m3u，不去重，只去掉多余#EXTM3U
+> tmp_all.txt
+sed '/^#EXTM3U/d' repo1.m3u >> tmp_all.txt
+sed '/^#EXTM3U/d' repo2.m3u >> tmp_all.txt
+
+# 2. 解析m3u，把 #EXTINF 和链接打包成一行，方便按频道名排序
+awk '
+/^#EXTINF/ {
+    sub(/.*,/,"",$0);  #提取逗号后面频道名称
+    name=$0;
+    getline url;       #读取下一行播放地址
+    print name"\t"prev_line"\t"url;
+    prev_line=$0;
+}
+{prev_line=$0}
+' tmp_all.txt > tmp_pack.txt
+
+# 3. 使用demo.txt做优先级排序，demo内频道放前面，其余放后面
+awk -F"\t" '
+BEGIN{
+    #读取demo.txt预设顺序
+    if((getline<"demo.txt")>0){
+        demo_idx=0;
+        demo_name[$0]=++demo_idx;
+        while((getline<"demo.txt")>0){
+            demo_name[$0]=++demo_idx;
+        }
+        close("demo.txt");
+    }
+}
+{
+    chan_name=$1;
+    extinfo=$2;
+    url=$3;
+    if(chan_name in demo_name){
+        #在demo名单里，用demo序号作为排序key
+        sortkey=demo_name[chan_name];
+    }else{
+        #不在demo名单，放到末尾
+        sortkey=9999 + NR;
+    }
+    print sortkey"\t"extinfo"\n"url;
+}
+' tmp_pack.txt | sort -n | cut -f2- > tmp_ordered.txt
+
+# 组装最终m3u
 > zubo.txt
-# 写入唯一总表头
 echo "#EXTM3U" > zubo.txt
-
-# 把repo1全部内容，去掉#EXTM3U，原样追加（仓库1完整顺序）
-sed '/^#EXTM3U/d' repo1.m3u >> zubo.txt
-# 把repo2全部内容，去掉#EXTM3U，原样追加在末尾（仓库2完整顺序接在后面）
-sed '/^#EXTM3U/d' repo2.m3u >> zubo.txt
-
-# 生成最终播放m3u
+cat tmp_ordered.txt >> zubo.txt
 cp zubo.txt zubo.m3u
 
 # 生成index.html兜底页面
@@ -74,5 +111,5 @@ mkdir -p dist
 cp zubo.m3u index.html dist/
 cp -r functions dist/
 
-echo "✅ 合并完成！完全保留两个m3u各自内部原有顺序，原样追加"
+echo "✅ 合并完成！已按demo.txt频道名称顺序排序"
 echo "==== 合并后总行数：$(wc -l zubo.txt)"
