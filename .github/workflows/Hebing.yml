@@ -24,6 +24,7 @@ jobs:
           M3U_URL1: ${{ secrets.M3U_URL1 }}
           M3U_URL2: ${{ secrets.M3U_URL2 }}
         run: |
+          sed -i 's/\r$//' Hebing.sh
           chmod +x Hebing.sh
           ./Hebing.sh
 
