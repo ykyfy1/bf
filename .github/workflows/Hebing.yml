@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 安装python依赖
+      - name: 安装系统依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y sed curl
@@ -34,23 +34,20 @@ jobs:
           cp zubo.m3u dist/
           RAW="${BASIC_USER}:${BASIC_PASS}"
           B64=$(echo -n "$RAW" | base64)
-          cat > dist/_middleware.js <<'EOF'
-export async function onRequest({ request, next }) {
-  const auth = request.headers.get('authorization') || '';
-  const validAuth = "Basic __B64__";
-  if (auth !== validAuth) {
-    return new Response('Unauthorized', {
-      status: 401,
-      headers: {
-        'WWW-Authenticate': 'Basic realm="Access"',
-        'Cache-Control': 'no-store, no-cache, must-revalidate'
-      }
-    })
-  }
-  return await next();
-}
-EOF
-          sed -i "s|__B64__|$B64|g" dist/_middleware.js
+          echo 'export async function onRequest({ request, next }) {' > dist/_middleware.js
+          echo '  const auth = request.headers.get("authorization") || "";' >> dist/_middleware.js
+          echo '  const validAuth = "Basic '${B64}'";' >> dist/_middleware.js
+          echo '  if (auth !== validAuth) {' >> dist/_middleware.js
+          echo '    return new Response("Unauthorized", {' >> dist/_middleware.js
+          echo '      status: 401,' >> dist/_middleware.js
+          echo '      headers: {' >> dist/_middleware.js
+          echo '        "WWW-Authenticate": "Basic realm=\"Access\"",' >> dist/_middleware.js
+          echo '        "Cache-Control": "no-store, no-cache, must-revalidate"' >> dist/_middleware.js
+          echo '      }' >> dist/_middleware.js
+          echo '    })' >> dist/_middleware.js
+          echo '  }' >> dist/_middleware.js
+          echo '  return await next();' >> dist/_middleware.js
+          echo '}' >> dist/_middleware.js
 
       - name: 使用wrangler部署到Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
