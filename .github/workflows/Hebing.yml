@@ -2,8 +2,8 @@ name: Hebing
 permissions:
   contents: write
 on:
-  #schedule:
-    #- cron: "0 20 * * *"
+  schedule:
+    - cron: "0 23 * * *"
   workflow_dispatch:
 jobs:
   run-script:
